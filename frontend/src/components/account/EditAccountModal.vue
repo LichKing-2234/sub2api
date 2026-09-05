@@ -2854,7 +2854,7 @@
             <input
               v-model.number="autoResetCredit5hThreshold"
               type="number"
-              min="0.1"
+              min="0"
               max="100"
               step="0.1"
               class="input"
@@ -2867,7 +2867,7 @@
             <input
               v-model.number="autoResetCredit7dThreshold"
               type="number"
-              min="0.1"
+              min="0"
               max="100"
               step="0.1"
               class="input"
@@ -4137,7 +4137,7 @@ const autoPause7dThreshold = ref<number | null>(null)
 const autoPause5hDisabled = ref(false)
 const autoPause7dDisabled = ref(false)
 const autoResetCreditEnabled = ref(false)
-const autoResetCredit5hThreshold = ref(100)
+const autoResetCredit5hThreshold = ref(0)
 const autoResetCredit7dThreshold = ref(100)
 const autoResetCreditExpiryEnabled = ref(false)
 const autoResetCreditExpiryLeadMinutes = ref(10)
@@ -4699,7 +4699,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
 	autoPause7dDisabled.value = extra?.auto_pause_7d_disabled === true
 	autoResetCreditEnabled.value = extra?.auto_reset_credit_enabled === true
 	autoResetCredit5hThreshold.value =
-		typeof extra?.auto_reset_credit_5h_threshold === 'number' ? extra.auto_reset_credit_5h_threshold * 100 : 100
+		typeof extra?.auto_reset_credit_5h_threshold === 'number' ? extra.auto_reset_credit_5h_threshold * 100 : 0
 	autoResetCredit7dThreshold.value =
 		typeof extra?.auto_reset_credit_7d_threshold === 'number' ? extra.auto_reset_credit_7d_threshold * 100 : 100
 	autoResetCreditExpiryEnabled.value = extra?.auto_reset_credit_expiry_enabled === true
@@ -5702,7 +5702,7 @@ const handleSubmit = async () => {
   }
 	if (autoResetCreditEnabled.value) {
 		const thresholds = [autoResetCredit5hThreshold.value, autoResetCredit7dThreshold.value]
-		if (thresholds.some((value) => !Number.isFinite(value) || value < 0.1 || value > 100)) {
+		if (thresholds.some((value) => !Number.isFinite(value) || (value !== 0 && value < 0.1) || value > 100)) {
 			appStore.showError(t('admin.accounts.autoResetCredit.thresholdInvalid'))
 			return
 		}
