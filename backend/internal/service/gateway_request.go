@@ -573,6 +573,44 @@ func isClaude55SignedThinkingModel(model string) bool {
 	return claude.IsOpus55(model) || claude.IsSonnet55(model) || claude.IsHaiku55(model)
 }
 
+// normalizeClaude55WebSearchRequestBody adapts the WebSearch side-query that
+// Claude Code sends for its native web_search tool (thinking.type=disabled plus
+// a forced tool_choice) to the Opus/Sonnet 5.5 contract: those models require
+// adaptive (or omitted) thinking and reject forced tool choices. The side-query
+// is the only request carrying exactly one web_search tool; it does not need
+// either field because the model executes the server tool on its own.
+//
+// See anthropics/claude-code#89633 and #98962: internal tool side-queries keep
+// sending legacy thinking/tool_choice although the client itself knows the
+// model rejects them.
+func normalizeClaude55WebSearchRequestBody(body []byte, model string) ([]byte, bool) {
+	if !claude.IsOpus55(model) && !claude.IsSonnet55(model) {
+		return body, false
+	}
+	changed := false
+	switch gjson.GetBytes(body, "thinking.type").String() {
+	case "disabled", "enabled":
+		if next, err := sjson.DeleteBytes(body, "thinking"); err == nil {
+			body = next
+			changed = true
+		}
+	}
+	switch gjson.GetBytes(body, "tool_choice.type").String() {
+	case "any", "tool", "function", "custom", "namespace":
+		if next, err := sjson.DeleteBytes(body, "tool_choice"); err == nil {
+			body = next
+			changed = true
+		}
+	}
+	if gjson.GetBytes(body, "tool_choice").String() == "required" {
+		if next, err := sjson.DeleteBytes(body, "tool_choice"); err == nil {
+			body = next
+			changed = true
+		}
+	}
+	return body, changed
+}
+
 // validateClaude55Request rejects settings that the upstream cannot honor.
 // Call before OAuth mimicry can remove tool_choice or alter thinking defaults.
 func validateClaude55Request(body []byte, model string) error {
