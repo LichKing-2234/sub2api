@@ -1,11 +1,12 @@
-name: custom-image-8139
+name: custom-image-ccws1
 
-# Builds the PR #8139 backport image for linux/amd64 and pushes it to GHCR.
+# Builds the Claude 5.5 WebSearch compatibility image (backport of PR #8139 plus
+# the WebSearch side-query normalization) for linux/amd64 and pushes it to GHCR.
 # Triggered on pushes to the custom branch only.
 on:
   push:
     branches:
-      - custom/8139-v0.2.17
+      - custom/cc-websearch-5.5
   workflow_dispatch:
 
 permissions:
@@ -36,9 +37,9 @@ jobs:
           file: ./Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/lichking-2234/sub2api:0.2.17-8139
+          tags: ghcr.io/lichking-2234/sub2api:0.2.17-ccws1
           build-args: |
-            VERSION=v0.2.17-8139
+            VERSION=v0.2.17-ccws1
             COMMIT=${{ github.sha }}
             DATE=${{ github.event.repository.updated_at }}
           labels: |
