@@ -595,3 +595,53 @@ func TestAdminServiceBulkUpdateAccounts_ValidatesFilterResolvedOpenAITargets(t *
 	require.Equal(t, []int64{7}, repo.getByIDsIDs)
 	require.Zero(t, repo.bulkUpdateCalls)
 }
+
+// TestAdminService_BulkUpdateAccounts_WritesAutoResetCreditConfig 验证批量更新会把
+// 自动用卡配置键按账号级校验后写入，而不是像运行态键一样被剥掉。
+func TestAdminService_BulkUpdateAccounts_WritesAutoResetCreditConfig(t *testing.T) {
+	repo := &accountRepoStubForBulkUpdate{
+		getByIDsAccounts: []*Account{
+			{ID: 11, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive, Schedulable: true},
+			{ID: 12, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive, Schedulable: true},
+		},
+	}
+	svc := &adminServiceImpl{accountRepo: repo}
+
+	result, err := svc.BulkUpdateAccounts(context.Background(), &BulkUpdateAccountsInput{
+		AccountIDs: []int64{11, 12},
+		Extra: map[string]any{
+			OpenAIAutoResetCreditExpiryEnabledExtraKey: true,
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Success)
+	require.True(t, repo.getByIDsCalled, "bulk auto-reset config must validate its targets")
+	require.Equal(t, true, repo.lastBulkUpdate.Extra[OpenAIAutoResetCreditExpiryEnabledExtraKey])
+	require.Equal(t, float64(openAIAutoResetCreditDefaultLeadMinutes), repo.lastBulkUpdate.Extra[OpenAIAutoResetCreditExpiryLeadMinutesExtraKey],
+		"normalization injects the default expiry lead when only the switch is sent")
+	require.NotContains(t, repo.lastBulkUpdate.Extra, OpenAIAutoResetCreditStateExtraKey)
+	require.NotContains(t, repo.lastBulkUpdate.Extra, OpenAIAutoResetCreditExpiryAtExtraKey)
+}
+
+// TestAdminService_BulkUpdateAccounts_RejectsAutoResetCreditConfigForIneligibleTargets
+// 验证批量更新命中非 OpenAI OAuth 母账号时整体拒绝，且不产生任何写入。
+func TestAdminService_BulkUpdateAccounts_RejectsAutoResetCreditConfigForIneligibleTargets(t *testing.T) {
+	repo := &accountRepoStubForBulkUpdate{
+		getByIDsAccounts: []*Account{
+			{ID: 11, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive},
+		},
+	}
+	svc := &adminServiceImpl{accountRepo: repo}
+
+	result, err := svc.BulkUpdateAccounts(context.Background(), &BulkUpdateAccountsInput{
+		AccountIDs: []int64{11},
+		Extra: map[string]any{
+			OpenAIAutoResetCreditEnabledExtraKey: true,
+		},
+	})
+
+	require.Nil(t, result)
+	requireApplicationErrorReason(t, err, "OPENAI_AUTO_RESET_CREDIT_ACCOUNT_INVALID")
+	require.Zero(t, repo.bulkUpdateCalls, "ineligible target must be rejected before any write")
+}
