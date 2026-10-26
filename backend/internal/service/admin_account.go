@@ -960,12 +960,57 @@ func (s *adminServiceImpl) UpdateAccountExtra(ctx context.Context, id int64, upd
 	return s.accountRepo.UpdateExtra(ctx, id, updates)
 }
 
+// hasOpenAIAutoResetCreditConfigExtra reports whether an extra update carries any
+// account-level auto-reset configuration key (runtime state keys excluded).
+func hasOpenAIAutoResetCreditConfigExtra(extra map[string]any) bool {
+	if len(extra) == 0 {
+		return false
+	}
+	for _, key := range []string{
+		OpenAIAutoResetCreditEnabledExtraKey,
+		OpenAIAutoResetCredit5hThresholdExtraKey,
+		OpenAIAutoResetCredit7dThresholdExtraKey,
+		OpenAIAutoResetCreditExpiryEnabledExtraKey,
+		OpenAIAutoResetCreditExpiryLeadMinutesExtraKey,
+	} {
+		if _, ok := extra[key]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// normalizeBulkOpenAIAutoResetCreditExtra validates one bulk increment against
+// every target, using the same gate as the single-account update: automatic
+// reset credits are only supported on OpenAI OAuth parent accounts. The bulk
+// merge writes one identical extra map, so a single ineligible target rejects
+// the whole batch rather than leaving it partially configured.
+func normalizeBulkOpenAIAutoResetCreditExtra(extra map[string]any, accountIDs []int64, targets map[int64]*Account) (map[string]any, error) {
+	var normalized map[string]any
+	for _, accountID := range accountIDs {
+		account, ok := targets[accountID]
+		if !ok || account == nil {
+			return nil, ErrAccountNotFound
+		}
+		next, err := normalizeOpenAIAutoResetCreditExtra(account.Platform, account.Type, account.IsShadow(), extra)
+		if err != nil {
+			return nil, err
+		}
+		if normalized == nil {
+			normalized = next
+		}
+	}
+	return normalized, nil
+}
+
 // BulkUpdateAccounts updates multiple accounts in one request.
 // It merges credentials/extra keys instead of overwriting the whole object.
 func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUpdateAccountsInput) (*BulkUpdateAccountsResult, error) {
 	// Managed probe/session state may only enter through dedicated typed endpoints.
 	input.Extra = sanitizedCodexFingerprintExtraUpdates(input.Extra)
-	input.Extra = stripOpenAIAutoResetCreditManagedExtra(input.Extra, true)
+	// 运行态键（快照/到期时刻）只能由后台服务维护；配置键在下方按目标账号校验后放行，
+	// 否则批量复制永远写不进自动用卡配置。
+	input.Extra = stripOpenAIAutoResetCreditManagedExtra(input.Extra, false)
 	delete(input.Extra, UpstreamBillingProbeEnabledExtraKey)
 	delete(input.Extra, UpstreamBillingRateSyncEnabledExtraKey)
 	delete(input.Extra, UpstreamBillingProbeExtraKey)
@@ -1009,7 +1054,7 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 
 	// 预取所有目标账号，供凭据守卫/代理守卫/混合渠道检查共用，避免多次 DB 查询。
 	var cachedTargets []*Account
-	if len(input.Credentials) > 0 || input.ProxyID != nil || needMixedChannelCheck || openAISettings.any() || input.ProbeEnabled != nil || input.RateMultiplier != nil {
+	if len(input.Credentials) > 0 || input.ProxyID != nil || needMixedChannelCheck || openAISettings.any() || input.ProbeEnabled != nil || input.RateMultiplier != nil || hasOpenAIAutoResetCreditConfigExtra(input.Extra) {
 		loaded, err := s.accountRepo.GetByIDs(ctx, input.AccountIDs)
 		if err != nil {
 			return nil, err
@@ -1021,6 +1066,13 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 		if account != nil {
 			targetsByID[account.ID] = account
 		}
+	}
+	if hasOpenAIAutoResetCreditConfigExtra(input.Extra) {
+		normalized, err := normalizeBulkOpenAIAutoResetCreditExtra(input.Extra, input.AccountIDs, targetsByID)
+		if err != nil {
+			return nil, err
+		}
+		input.Extra = normalized
 	}
 	if openAISettings.any() {
 		inheritedCount, err := validateBulkOpenAISettingsTargets(input, openAISettings, targetsByID)
