@@ -2,8 +2,9 @@ name: custom-image-ccws1
 
 # Builds the Claude 5.5 WebSearch compatibility image (backport of PR #8139 plus
 # the WebSearch side-query normalization) together with the OpenAI/Codex
-# reset-credit expiry auto-use backport (#6744 + #6950) for linux/amd64 and
-# pushes it to GHCR. Triggered on pushes to the custom branch only.
+# reset-credit expiry auto-use backport (#6744 + #6950) and the bulk-update
+# allowance for its account-level config keys, for linux/amd64, and pushes it to
+# GHCR. Triggered on pushes to the custom branch only.
 on:
   push:
     branches:
@@ -38,9 +39,9 @@ jobs:
           file: ./Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/lichking-2234/sub2api:0.2.18-ccws2
+          tags: ghcr.io/lichking-2234/sub2api:0.2.18-ccws3
           build-args: |
-            VERSION=v0.2.18-ccws2
+            VERSION=v0.2.18-ccws3
             COMMIT=${{ github.sha }}
             DATE=${{ github.event.repository.updated_at }}
           labels: |
