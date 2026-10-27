@@ -1060,15 +1060,20 @@ func openAIAutoResetNoCreditConfirmed(state *OpenAIAutoResetCreditState, now tim
 	return state != nil && state.Status == OpenAIAutoResetStatusNoCredit && !openAIAutoResetStateStale(state, now)
 }
 
+// openAIAutoResetQueryStageFailure 报告失败码来自查询上游这一步（或紧接着的落库）。
+// 这类失败只说明上一次实查没拿到结果，手动查询成功后即可判定记录已过期。
+func openAIAutoResetQueryStageFailure(code string) bool {
+	switch code {
+	case "RESET_CREDIT_QUERY_FAILED", "USAGE_SNAPSHOT_WRITE_FAILED", "RESET_CREDIT_DETAILS_UNAVAILABLE", "RESET_CREDIT_DETAILS_INCOMPLETE":
+		return true
+	}
+	return false
+}
+
 // openAIAutoResetQueryFailureBackoffActive 报告查询阶段刚失败、仍在重试间隔内。
 // 只覆盖查询、快照写入、卡明细缺失或不全四类失败；用卡阶段的失败需要立即按原幂等键重试。
 func openAIAutoResetQueryFailureBackoffActive(state *OpenAIAutoResetCreditState, now time.Time) bool {
-	if state == nil || state.Status != OpenAIAutoResetStatusFailed {
-		return false
-	}
-	switch state.ErrorCode {
-	case "RESET_CREDIT_QUERY_FAILED", "USAGE_SNAPSHOT_WRITE_FAILED", "RESET_CREDIT_DETAILS_UNAVAILABLE", "RESET_CREDIT_DETAILS_INCOMPLETE":
-	default:
+	if state == nil || state.Status != OpenAIAutoResetStatusFailed || !openAIAutoResetQueryStageFailure(state.ErrorCode) {
 		return false
 	}
 	failedAt, err := time.Parse(time.RFC3339, state.LastResultAt)
@@ -1250,18 +1255,26 @@ func (s *OpenAIQuotaAutoResetService) syncCreditUsage(ctx context.Context, accou
 	if !config.Active() {
 		return
 	}
+	state := openAIAutoResetStateFromExtra(account.Extra)
+	// 手动查询已成功，说明运行态里记录的“查询失败”过期了：下次计划取卡在 24 小时后，
+	// 若不立即让调度器实查一次，列表会一直显示失败标签（反复手动刷新还会不断把它续期）。
+	queryFailureResolved := state != nil && state.Status == OpenAIAutoResetStatusFailed && openAIAutoResetQueryStageFailure(state.ErrorCode)
+	nextAt := time.Now().Add(openAIAutoResetCreditRefreshInterval)
+	if queryFailureResolved {
+		nextAt = time.Now()
+	}
 	s.noteUpstreamClock(usage.upstreamTime, time.Now())
 	if s.isSchedulerLeader() {
-		s.fetchStates.Store(accountID, openAIAutoResetFetchState{nextAt: time.Now().Add(openAIAutoResetCreditRefreshInterval), fetched: true, config: config})
+		s.fetchStates.Store(accountID, openAIAutoResetFetchState{nextAt: nextAt, fetched: true, config: config})
 		s.armExpiryTimer(ctx, accountID, config, usage)
 	}
 	notify := s.markExpiryDueIfExpiring(accountID, config, usage)
 	// 网关暂停决策读运行态里的卡数；与刚查到的不一致时让调度器立即实查校正，而不是等 24 小时。
-	if state := openAIAutoResetStateFromExtra(account.Extra); state != nil && state.AvailableCount != usage.RateLimitResetCredits.AvailableCount {
+	if state != nil && state.AvailableCount != usage.RateLimitResetCredits.AvailableCount {
 		s.stateDue.Store(accountID, struct{}{})
 		notify = true
 	}
-	if notify {
+	if notify || queryFailureResolved {
 		s.Notify(accountID)
 	}
 }
