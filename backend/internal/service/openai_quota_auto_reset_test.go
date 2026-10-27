@@ -1753,3 +1753,44 @@ func TestOpenAIQuotaAutoResetService_ExpiryRetryStopsByUpstreamClockFromEitherPa
 		})
 	}
 }
+
+// TestOpenAIQuotaAutoResetService_ManualSyncUnsticksQueryFailure 复现线上“手动刷新成功后
+// 次数查询失败标签仍一直消失不掉”的路径：手动查询成功会把下次计划取卡推到 24 小时后，
+// 但运行态里的查询失败记录不会被清掉，列表标签就一直挂到下一次计划实查。
+func TestOpenAIQuotaAutoResetService_ManualSyncUnsticksQueryFailure(t *testing.T) {
+	now := time.Now().UTC()
+	account := newAutoResetLowUsageAccount(now, map[string]any{
+		OpenAIAutoResetCreditExpiryEnabledExtraKey:     true,
+		OpenAIAutoResetCreditExpiryLeadMinutesExtraKey: 1440.0,
+		OpenAIAutoResetCreditEnabledExtraKey:           false,
+		OpenAIAutoResetCreditStateExtraKey: map[string]any{
+			"status":          OpenAIAutoResetStatusFailed,
+			"error_code":      "RESET_CREDIT_QUERY_FAILED",
+			"last_result_at":  now.Add(-time.Minute).Format(time.RFC3339),
+			"checked_at":      now.Add(-time.Minute).Format(time.RFC3339),
+			"available_count": 0,
+		},
+	})
+	repo := &autoResetTestAccountRepo{account: account}
+	usage := newAutoResetLowUsage(now, "", now)
+	usage.RateLimitResetCredits = &OpenAIRateLimitResetCredits{}
+	usage.autoResetCandidates = nil
+	quota := &autoResetTestQuota{usage: usage}
+	service := newAutoResetTestService(repo, quota)
+	t.Cleanup(service.Stop)
+
+	// 失败后的账号已被排进 24 小时计划，且没有到期定时器。
+	service.fetchStates.Store(account.ID, openAIAutoResetFetchState{
+		nextAt:  now.Add(openAIAutoResetCreditRefreshInterval),
+		fetched: true,
+		config:  ResolveOpenAIAutoResetCreditConfig(account),
+	})
+
+	service.syncCreditUsage(context.Background(), account.ID, usage)
+	require.NoError(t, service.evaluateAccount(context.Background(), account.ID))
+
+	require.Equal(t, int32(1), quota.queryCalls.Load(), "手动刷新成功后应重新实查一次，清掉已过期的查询失败记录")
+	state := openAIAutoResetStateFromExtra(repo.account.Extra)
+	require.NotNil(t, state)
+	require.NotEqual(t, OpenAIAutoResetStatusFailed, state.Status)
+}
