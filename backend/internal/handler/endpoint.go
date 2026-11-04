@@ -33,6 +33,9 @@ const (
 	EndpointSeedanceTasks        = "/api/v3/contents/generations/tasks"
 	EndpointGeminiModels         = "/v1beta/models"
 	EndpointGeminiCachedContents = "/v1beta/cachedContents"
+	// EndpointKiroNative is the canonical inbound endpoint of the Kiro native
+	// protocol thin proxy (/kiro, /kiro/ and any deeper suffix collapse here).
+	EndpointKiroNative = "/kiro"
 )
 
 const EndpointAntigravityGenerateContent = "/v1internal:streamGenerateContent"
@@ -85,6 +88,8 @@ const (
 func NormalizeInboundEndpoint(path string) string {
 	path = strings.TrimSpace(path)
 	switch {
+	case path == EndpointKiroNative || strings.HasPrefix(path, EndpointKiroNative+"/"):
+		return EndpointKiroNative
 	case strings.Contains(path, "/contents/generations/tasks"):
 		return EndpointSeedanceTasks
 	case strings.Contains(path, EndpointResponsesInputTokens) || isResponsesInputTokensAliasPath(path):
