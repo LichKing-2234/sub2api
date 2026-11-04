@@ -58,15 +58,15 @@ const legacyZenRules = [
 ]
 
 function legacyIsMultiProtocol(platform: string): boolean {
-  return ['kimi', 'zhipu', 'deepseek', 'minimax', 'opencode_go', 'command_code', 'cline'].includes(platform)
+  return ['kimi', 'zhipu', 'deepseek', 'minimax', 'opencode_go', 'command_code', 'cline', 'kiro'].includes(platform)
 }
 
 function legacySupportsResponses(platform: string): boolean {
-  return ['deepseek', 'kimi', 'minimax', 'opencode_go', 'command_code'].includes(platform)
+  return ['deepseek', 'kimi', 'minimax', 'opencode_go', 'command_code', 'kiro'].includes(platform)
 }
 
 function legacyHeaderOverride(platform: string, type: string): boolean {
-  if (['anthropic', 'openai', 'kimi', 'zhipu', 'deepseek', 'minimax', 'opencode_go', 'command_code', 'cline'].includes(platform)) {
+  if (['anthropic', 'openai', 'kimi', 'zhipu', 'deepseek', 'minimax', 'opencode_go', 'command_code', 'cline', 'kiro'].includes(platform)) {
     return type === 'apikey'
   }
   if (platform === 'grok') return type === 'apikey' || type === 'oauth'
@@ -86,6 +86,8 @@ function legacyDefaultCNBaseUrl(platform: string, mode: string, protocol: CnApiP
         return 'https://api.minimaxi.com/anthropic'
       case 'opencode_go':
         return mode === 'zen' ? legacyOpenCode.zenAnthropic : legacyOpenCode.goAnthropic
+      case 'kiro':
+        return 'http://127.0.0.1:5678'
       default:
         return ''
     }
@@ -101,6 +103,8 @@ function legacyDefaultCNBaseUrl(platform: string, mode: string, protocol: CnApiP
       return 'https://api.minimaxi.com/v1'
     case 'opencode_go':
       return mode === 'zen' ? legacyOpenCode.zenBase : legacyOpenCode.goBase
+    case 'kiro':
+      return 'http://127.0.0.1:5678/v1'
     default:
       return ''
   }
@@ -120,7 +124,8 @@ const legacyModes: Record<string, string[]> = {
   zhipu: ['payg', 'coding'],
   deepseek: ['payg'],
   minimax: ['payg', 'coding'],
-  opencode_go: ['go', 'zen']
+  opencode_go: ['go', 'zen'],
+  kiro: ['gateway']
 }
 
 const probePlatforms = [

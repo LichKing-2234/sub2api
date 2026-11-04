@@ -221,6 +221,23 @@ var providerProfiles = map[string]*ProviderProfile{
 			},
 		},
 	},
+	PlatformKiro: {
+		Platform:         PlatformKiro,
+		DefaultMode:      AccountModeKiroGateway,
+		Routing:          ProviderRoutingByInbound,
+		DefaultTestModel: DefaultKiroTestModel,
+		// kiro2cc 一个上游同时提供 Anthropic / Chat Completions / Responses 三种原生协议，
+		// 按入站协议选择端点；账号 credentials.base_url 覆盖这里的表单预填默认值。
+		Modes: map[string]ProviderEndpoints{
+			AccountModeKiroGateway: {
+				BaseURLs: map[string]string{
+					APIProtocolAnthropic:       DefaultKiroGatewayBaseURL,
+					APIProtocolChatCompletions: DefaultKiroGatewayOpenAIBaseURL,
+					APIProtocolResponses:       DefaultKiroGatewayOpenAIBaseURL,
+				},
+			},
+		},
+	},
 }
 
 // LookupProviderProfile 返回 platform 对应的多协议供应商 profile；非此类平台返回 nil。

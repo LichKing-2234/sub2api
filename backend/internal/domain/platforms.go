@@ -48,6 +48,9 @@ var platformList = []PlatformSpec{
 	{ID: PlatformTypeSafe, DisplayName: "TypeSafe / Jev", Gateway: PlatformGatewayAnthropic, LiteLLMProvider: "typesafe"},
 	{ID: PlatformCommandCode, DisplayName: "Command Code", Gateway: PlatformGatewayOpenAI},
 	{ID: PlatformCline, DisplayName: "Cline", Gateway: PlatformGatewayOpenAI},
+	// Kiro：Kiro 订阅账号经外部 kiro2cc 网关（Anthropic/OpenAI/Responses 多协议）接入，
+	// 因此按多协议 API Key 供应商处理、走 OpenAI 网关，独立平台便于分组/配额/用量统计。
+	{ID: PlatformKiro, DisplayName: "Kiro", Gateway: PlatformGatewayOpenAI},
 }
 
 var platformIndex = func() map[string]int {

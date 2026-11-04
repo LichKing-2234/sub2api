@@ -278,6 +278,26 @@
           }
         ]
       }
+    },
+    {
+      "id": "kiro",
+      "display_name": "Kiro",
+      "gateway": "openai",
+      "cn_provider": false,
+      "multi_protocol": {
+        "default_mode": "gateway",
+        "routing": "by_inbound",
+        "modes": [
+          {
+            "mode": "gateway",
+            "base_urls": {
+              "anthropic": "http://127.0.0.1:5678",
+              "chat_completions": "http://127.0.0.1:5678/v1",
+              "responses": "http://127.0.0.1:5678/v1"
+            }
+          }
+        ]
+      }
     }
   ],
   "composite_precedence": [
@@ -293,6 +313,7 @@
     "opencode_go",
     "typesafe",
     "command_code",
-    "cline"
+    "cline",
+    "kiro"
   ]
 }

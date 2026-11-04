@@ -37,7 +37,10 @@ const (
 	PlatformCommandCode = "command_code"
 	// PlatformCline 是 Cline API（多模型聚合，OpenAI 兼容 Chat Completions；按量积分计费，
 	// 另有 ClinePass 订阅）。
-	PlatformCline     = "cline"
+	PlatformCline = "cline"
+	// PlatformKiro 是 Kiro 平台：Kiro 订阅账号经 kiro2cc 网关暴露为
+	// Anthropic / OpenAI 兼容 API，sub2api 以多协议 API Key 上游接入并独立计费/计量。
+	PlatformKiro      = "kiro"
 	PlatformComposite = "composite"
 )
 
