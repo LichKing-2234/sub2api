@@ -40,6 +40,13 @@ func TestNormalizeInboundEndpoint(t *testing.T) {
 		{"/v1beta/cachedContents", EndpointGeminiCachedContents},
 		{"/v1beta/cachedContents/gfo2i2haszm3wbwiyivyok5cyddubfwsr77efg7h", EndpointGeminiCachedContents},
 
+		// Kiro native thin proxy — every suffix collapses to the same canonical
+		// inbound endpoint so usage/ops stats stay grouped.
+		{"/kiro", EndpointKiroNative},
+		{"/kiro/", EndpointKiroNative},
+		{"/kiro/GetProfile", EndpointKiroNative},
+		{"/kiro/generateAssistantResponse", EndpointKiroNative},
+
 		// Prefixed paths (antigravity, openai) — root Responses.
 		{"/antigravity/v1/messages", EndpointMessages},
 		{"/openai/v1/responses", EndpointResponses},

@@ -105,6 +105,7 @@ type Config struct {
 	Idempotency             IdempotencyConfig             `mapstructure:"idempotency"`
 	BatchImage              BatchImageConfig              `mapstructure:"batch_image"`
 	ImageStorage            ImageStorageConfig            `mapstructure:"image_storage"`
+	KiroNative              KiroNativeConfig              `mapstructure:"kiro_native"`
 	Plugins                 PluginConfig                  `mapstructure:"plugins"`
 
 	// Enforce only API-key spending windows in simple mode.
@@ -298,6 +299,51 @@ func (c *ImageStorageConfig) MissingCredentialKeys() []string {
 		missing = append(missing, "image_storage.secret_access_key")
 	}
 	return missing
+}
+
+// KiroNativeConfig 配置 Kiro 原生协议薄反代（POC）。
+//
+// 目标是让本地 Kiro CLI/IDE 把原生协议流量打到 sub2api 的 /kiro 路径：sub2api
+// 复用既有 API-Key 认证/分组/配额后，把请求原样转发给 kiro2cc 的原生入站
+// （raw native protocol，不做协议翻译），并从响应的 AWS EventStream 帧里解析
+// token 用量写入 usage_logs。
+//
+// 未配置 Upstream 时该路由返回 503（视为功能未启用）。
+type KiroNativeConfig struct {
+	// Upstream 是 kiro2cc 原生入站的基址（如 http://kiro2cc-proxy-prod-proxy:5678/native）。
+	Upstream string `mapstructure:"upstream"`
+	// Token 是发给 kiro2cc 原生入站的内部令牌（请求头 X-Kiro-Native-Token）。
+	Token string `mapstructure:"token"`
+	// TimeoutSeconds 是单次代理请求（含流式全过程）的超时，默认 600 秒。
+	TimeoutSeconds int `mapstructure:"timeout_seconds"`
+	// MaxBodyBytes 是入站请求体上限，默认 16 MiB。
+	MaxBodyBytes int64 `mapstructure:"max_body_bytes"`
+	// AttributionAccountID 是 usage_logs.account_id 的固定归属账号。
+	// 0 表示从 API Key 所属分组里选择第一个可调度账号（POC：Kiro 账号选择仍发生在
+	// kiro2cc，这里只做计费归属）。
+	AttributionAccountID int64 `mapstructure:"attribution_account_id"`
+}
+
+// Enabled 报告原生 Kiro 薄反代是否已配置上游。
+func (c KiroNativeConfig) Enabled() bool {
+	return strings.TrimSpace(c.Upstream) != ""
+}
+
+// EffectiveTimeout 返回代理超时；未配置或非法时回退 600 秒。
+func (c KiroNativeConfig) EffectiveTimeout() time.Duration {
+	seconds := c.TimeoutSeconds
+	if seconds <= 0 {
+		seconds = 600
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+// EffectiveMaxBodyBytes 返回请求体上限；未配置或非法时回退 16 MiB。
+func (c KiroNativeConfig) EffectiveMaxBodyBytes() int64 {
+	if c.MaxBodyBytes <= 0 {
+		return 16 << 20
+	}
+	return c.MaxBodyBytes
 }
 
 type LinuxDoConnectConfig struct {
@@ -2307,6 +2353,16 @@ func setDefaults() {
 	viper.SetDefault("image_storage.access_key_id", "")
 	viper.SetDefault("image_storage.secret_access_key", "")
 	viper.SetDefault("image_storage.public_base_url", "")
+
+	// Kiro native thin proxy (/kiro -> kiro2cc native inbound). Zero-valued
+	// defaults keep every key reachable through KIRO_NATIVE_* environment
+	// variables; the subsystem applies its own effective defaults after unmarshal
+	// (EffectiveTimeout / EffectiveMaxBodyBytes).
+	viper.SetDefault("kiro_native.upstream", "")
+	viper.SetDefault("kiro_native.token", "")
+	viper.SetDefault("kiro_native.timeout_seconds", 0)
+	viper.SetDefault("kiro_native.max_body_bytes", 0)
+	viper.SetDefault("kiro_native.attribution_account_id", 0)
 
 	// Ops (vNext)
 	viper.SetDefault("ops.enabled", true)

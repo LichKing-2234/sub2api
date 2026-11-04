@@ -1313,3 +1313,31 @@ image_storage:
   presign_expiry_hours: 24
   # 当上游返回的是图片 url 时，下载该图片再转存的字节上限（默认 32MB）
   max_download_bytes: 33554432
+
+# =============================================================================
+# Kiro Native Thin Proxy (POC: /kiro -> kiro2cc native inbound)
+# =============================================================================
+# 让本地 Kiro CLI/IDE 把原生协议（CodeWhisperer JSON + AWS EventStream）请求打到
+# sub2api 的 /kiro 路径。sub2api 先做常规 API-Key 认证/分组/配额，然后把请求原样
+# 反代到 kiro2cc 的原生入站，不做任何协议翻译；响应中的 EventStream usage 帧会被
+# 解析后写入 usage_logs。
+#
+# 对应环境变量（viper: kiro_native.*）：
+#   KIRO_NATIVE_UPSTREAM               -> kiro_native.upstream
+#   KIRO_NATIVE_TOKEN                  -> kiro_native.token
+#   KIRO_NATIVE_TIMEOUT_SECONDS        -> kiro_native.timeout_seconds
+#   KIRO_NATIVE_MAX_BODY_BYTES         -> kiro_native.max_body_bytes
+#   KIRO_NATIVE_ATTRIBUTION_ACCOUNT_ID -> kiro_native.attribution_account_id
+#
+# upstream 为空时 /kiro 路由返回 503（功能未启用）。
+kiro_native:
+  # kiro2cc 原生入站基址，例如 http://kiro2cc-proxy-prod-proxy:5678/native
+  upstream: ""
+  # 内部令牌，sub2api 以 X-Kiro-Native-Token 头转发给 kiro2cc
+  token: ""
+  # 单次代理请求超时（秒），含流式全过程，默认 600
+  timeout_seconds: 600
+  # 入站请求体上限（字节），默认 16 MiB
+  max_body_bytes: 16777216
+  # usage_logs.account_id 的固定归属账号（0 = 自动选分组内第一个可调度账号）
+  attribution_account_id: 0
