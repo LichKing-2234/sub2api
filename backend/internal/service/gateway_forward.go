@@ -104,6 +104,17 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 			validationModel = account.GetMappedModel(validationModel)
 		}
 	}
+	// Claude Code 的 WebSearch 子请求固定携带 thinking=disabled + 强制 tool_choice，
+	// Opus/Sonnet 5.5 会拒绝这两种字段（见 anthropics/claude-code#89633）。子请求只
+	// 含一个 web_search 工具，规范化后再走 5.5 校验，避免内部搜索被 400 拦截。
+	if account != nil && account.Platform == PlatformAnthropic && isOnlyWebSearchToolInBody(parsed.Body.Bytes()) {
+		if normalized, changed := normalizeClaude55WebSearchRequestBody(parsed.Body.Bytes(), validationModel); changed {
+			if err := parsed.ReplaceBody(normalized); err != nil {
+				return nil, fmt.Errorf("normalize claude 5.5 web search request: %w", err)
+			}
+			logger.LegacyPrintf("service.gateway", "Normalized Claude 5.5 WebSearch side-query (model=%s)", validationModel)
+		}
+	}
 	if account != nil && account.Platform == PlatformAnthropic {
 		if err := validateClaude55Request(parsed.Body.Bytes(), validationModel); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"type": "error", "error": gin.H{"type": "invalid_request_error", "message": err.Error()}})
