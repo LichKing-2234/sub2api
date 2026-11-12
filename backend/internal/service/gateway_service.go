@@ -736,6 +736,15 @@ func (e *UpstreamFailoverError) ShouldReportAccountScheduleFailure() bool {
 	if e == nil {
 		return false
 	}
+	// Capacity shedding describes this request (client identity / model capacity),
+	// not the health of the selected account. Feeding it into the scheduler's
+	// error-rate EWMA makes retries inflate every account's error score, which
+	// triggers sticky-escape churn and spreads the retry storm across the pool
+	// (upstream #8681 / #8674). Keep the failover and the same-account retry; only
+	// stop attributing the failure to the account's scheduling health.
+	if e.IsOpenAICapacityShed() {
+		return false
+	}
 	return !e.IsCredentialFailure() || e.Scope == GatewayFailureScopeAccount
 }
 
